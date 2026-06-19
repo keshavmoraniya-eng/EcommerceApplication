@@ -3,6 +3,7 @@ package com.ecommerce.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 
@@ -11,6 +12,7 @@ import java.time.Instant;
 @Getter
 @Setter
 public class Product {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -21,24 +23,29 @@ public class Product {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = false)
+    @Column(nullable = false,precision = 10,scale = 2)
     private BigDecimal price;
 
     @Column(nullable = false)
-    private Integer stock;
+    private Integer stockQuantity=0;
 
-    @Column(name = "image_url")
     private String imageUrl;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id")
-    private Category category;
+    @Column(nullable = false)
+    private String category;
 
-    @Column(name = "created_at", updatable = false)
-    private Instant createdAt = Instant.now();
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ProductStatus status=ProductStatus.ACTIVE;
+
+    @Column(name = "created_at",updatable = false)
+    private Instant createdAt=Instant.now();
 
     @Column(name = "updated_at")
-    private Instant updatedAt = Instant.now();
+    private Instant updatedAt=Instant.now();
 
-    private String status = "ACTIVE";
+    @PreUpdate
+    public void onUpdate(){
+        this.updatedAt=Instant.now();
+    }
 }

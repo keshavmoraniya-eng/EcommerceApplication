@@ -6,12 +6,14 @@ import com.ecommerce.dto.RegisterRequest;
 import com.ecommerce.entity.RefreshToken;
 import com.ecommerce.entity.Role;
 import com.ecommerce.entity.User;
+import com.ecommerce.entity.UserStatus;
 import com.ecommerce.repository.RoleRepository;
 import com.ecommerce.repository.UserRepository;
 import com.ecommerce.util.JwtUtil;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,36 +49,49 @@ public class AuthenticationService {
             throw new IllegalArgumentException("Email is already in use");
         }
 
+        Role userRole=roleRepository.findByName("ROLE_USER")
+                .orElseGet(()->{
+                    Role role=new Role();
+                    role.setName("ROLE_USER");
+                    return roleRepository.save(role);
+                });
+
         User user=new User();
         user.setEmail(registerRequest.getEmail());
         user.setFullName(registerRequest.getFullName());
         user.setPhone(registerRequest.getPhone());
         user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
         user.setIsVerified(false);
-
-        // Assign default role (e.g., ROLE_USER)
-        Role userRole=roleRepository.findByName("ROLE_USER")
-                .orElseGet(()->{
-                    Role r=new Role();
-                    r.setName("ROLE_USER");
-                    return roleRepository.save(r);
-                });
+        user.setStatus(UserStatus.ACTIVE);
         user.setRoles(Collections.singleton(userRole));
+
+        userRepository.save(user);
     }
 
+    @Transactional
     public AuthResponse login(String email, String password){
-        Authentication authentication=authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(email, password)
-        );
+        try {
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(email, password));
+        }catch (AuthenticationException e){
+            throw new IllegalArgumentException("Invalid email or password");
+        }
 
-        //if authentication is successful, generate JWT token and refresh token
+        User user=userRepository.findByEmail(email)
+                .orElseThrow(()-> new IllegalArgumentException("User not found"));
+
+        if (user.getStatus() != UserStatus.ACTIVE){
+            throw new IllegalArgumentException("Account is "+user.getStatus().name().toLowerCase()+". Please contact support.");
+        }
+
+        //Rotate refresh token if it exists, otherwise create a new one
+        refreshTokenService.deleteByUser(user);
         String accessToken=jwtUtil.generateToken(email);
-        User user=userRepository.findByEmail(email).orElseThrow(()-> new IllegalArgumentException("User not found"));
         RefreshToken refreshToken=refreshTokenService.createRefreshToken(user);
+
         return new AuthResponse(accessToken, refreshToken.getToken());
     }
 
-    public String refreshAccessToken(String refreshTokenStr){
+    public AuthResponse refreshAccessToken(String refreshTokenStr){
         RefreshToken refreshToken=refreshTokenService.findByToken(refreshTokenStr)
                 .orElseThrow(()-> new IllegalArgumentException("Invalid refresh token"));
 
@@ -84,10 +99,11 @@ public class AuthenticationService {
             refreshTokenService.deleteByUser(refreshToken.getUser());
             throw new IllegalArgumentException("Refresh token has expired. Please login again.");
         }
-
-        return jwtUtil.generateToken(refreshToken.getUser().getEmail());
+        String newAccessToken=jwtUtil.generateToken(refreshToken.getUser().getEmail());
+        return new AuthResponse(newAccessToken, refreshToken.getToken());
     }
 
+    @Transactional
     public void logout(User user){
         refreshTokenService.deleteByUser(user);
     }
