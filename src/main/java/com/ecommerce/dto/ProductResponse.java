@@ -5,6 +5,7 @@ import com.ecommerce.entity.ProductStatus;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Getter
@@ -16,7 +17,7 @@ public class ProductResponse {
     private String description;
     private String category;
     private String imageUrl;
-    private Double price;
+    private BigDecimal price;
     private Integer stockQuantity;
     private ProductStatus status;
     private Instant createdAt;
@@ -28,7 +29,7 @@ public class ProductResponse {
         dto.setDescription(product.getDescription());
         dto.setCategory(product.getCategory());
         dto.setImageUrl(product.getImageUrl());
-        dto.setPrice(product.getPrice().doubleValue());
+        dto.setPrice(product.getPrice());
         dto.setStockQuantity(product.getStockQuantity());
         dto.setStatus(product.getStatus());
         dto.setCreatedAt(product.getCreatedAt());

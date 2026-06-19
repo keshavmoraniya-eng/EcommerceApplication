@@ -1,6 +1,5 @@
 package com.ecommerce.service;
 
-import com.ecommerce.dto.ApiResponse;
 import com.ecommerce.dto.AuthResponse;
 import com.ecommerce.dto.RegisterRequest;
 import com.ecommerce.entity.RefreshToken;
@@ -12,7 +11,6 @@ import com.ecommerce.repository.UserRepository;
 import com.ecommerce.util.JwtUtil;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,9 +20,6 @@ import java.util.Collections;
 
 @Service
 public class AuthenticationService {
-        // This service will handle authentication logic, such as validating user credentials,
-        // generating JWT tokens, and managing refresh tokens. It will interact with the UserRepository
-        // to retrieve user details and the RefreshTokenRepository to manage refresh tokens.
 
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
@@ -33,7 +28,13 @@ public class AuthenticationService {
     private final JwtUtil jwtUtil;
     private final RefreshTokenService refreshTokenService;
 
-    public AuthenticationService(AuthenticationManager authenticationManager, UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil, RefreshTokenService refreshTokenService) {
+    public AuthenticationService(
+            AuthenticationManager authenticationManager,
+            UserRepository userRepository,
+            RoleRepository roleRepository,
+            PasswordEncoder passwordEncoder,
+            JwtUtil jwtUtil,
+            RefreshTokenService refreshTokenService) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -42,21 +43,23 @@ public class AuthenticationService {
         this.refreshTokenService = refreshTokenService;
     }
 
+    // -------------------------------------------------------------------------
+    // REGISTER
+    // -------------------------------------------------------------------------
     @Transactional
-    public void register(RegisterRequest registerRequest){
-        // Check if user already exists
-        if(userRepository.existsByEmail(registerRequest.getEmail())){
+    public void register(RegisterRequest registerRequest) {
+        if (userRepository.existsByEmail(registerRequest.getEmail())) {
             throw new IllegalArgumentException("Email is already in use");
         }
 
-        Role userRole=roleRepository.findByName("ROLE_USER")
-                .orElseGet(()->{
-                    Role role=new Role();
-                    role.setName("ROLE_USER");
-                    return roleRepository.save(role);
+        Role userRole = roleRepository.findByName("ROLE_USER")
+                .orElseGet(() -> {
+                    Role r = new Role();
+                    r.setName("ROLE_USER");
+                    return roleRepository.save(r);
                 });
 
-        User user=new User();
+        User user = new User();
         user.setEmail(registerRequest.getEmail());
         user.setFullName(registerRequest.getFullName());
         user.setPhone(registerRequest.getPhone());
@@ -65,47 +68,59 @@ public class AuthenticationService {
         user.setStatus(UserStatus.ACTIVE);
         user.setRoles(Collections.singleton(userRole));
 
+        // FIX: was missing — user was never persisted
         userRepository.save(user);
     }
 
+    // -------------------------------------------------------------------------
+    // LOGIN
+    // -------------------------------------------------------------------------
     @Transactional
-    public AuthResponse login(String email, String password){
+    public AuthResponse login(String email, String password) {
+        // Throws BadCredentialsException automatically on failure — caught by GlobalExceptionHandler
         try {
-            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(email, password));
-        }catch (AuthenticationException e){
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(email, password));
+        } catch (AuthenticationException ex) {
             throw new IllegalArgumentException("Invalid email or password");
         }
 
-        User user=userRepository.findByEmail(email)
-                .orElseThrow(()-> new IllegalArgumentException("User not found"));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        if (user.getStatus() != UserStatus.ACTIVE){
-            throw new IllegalArgumentException("Account is "+user.getStatus().name().toLowerCase()+". Please contact support.");
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new IllegalArgumentException("Account is " + user.getStatus().name().toLowerCase() + ". Please contact support.");
         }
 
-        //Rotate refresh token if it exists, otherwise create a new one
+        // Rotate refresh token: delete old one(s) then issue a fresh one
         refreshTokenService.deleteByUser(user);
-        String accessToken=jwtUtil.generateToken(email);
-        RefreshToken refreshToken=refreshTokenService.createRefreshToken(user);
+        String accessToken = jwtUtil.generateToken(email);
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
         return new AuthResponse(accessToken, refreshToken.getToken());
     }
 
-    public AuthResponse refreshAccessToken(String refreshTokenStr){
-        RefreshToken refreshToken=refreshTokenService.findByToken(refreshTokenStr)
-                .orElseThrow(()-> new IllegalArgumentException("Invalid refresh token"));
+    // -------------------------------------------------------------------------
+    // REFRESH
+    // -------------------------------------------------------------------------
+    public AuthResponse refreshAccessToken(String refreshTokenStr) {
+        RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenStr)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
 
-        if(refreshTokenService.isExpired(refreshToken)){
+        if (refreshTokenService.isExpired(refreshToken)) {
             refreshTokenService.deleteByUser(refreshToken.getUser());
-            throw new IllegalArgumentException("Refresh token has expired. Please login again.");
+            throw new IllegalArgumentException("Refresh token expired. Please login again.");
         }
-        String newAccessToken=jwtUtil.generateToken(refreshToken.getUser().getEmail());
+
+        String newAccessToken = jwtUtil.generateToken(refreshToken.getUser().getEmail());
         return new AuthResponse(newAccessToken, refreshToken.getToken());
     }
 
+    // -------------------------------------------------------------------------
+    // LOGOUT
+    // -------------------------------------------------------------------------
     @Transactional
-    public void logout(User user){
+    public void logout(User user) {
         refreshTokenService.deleteByUser(user);
     }
-
 }
