@@ -12,6 +12,7 @@ import java.util.Set;
 @Getter
 @Setter
 public class User {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -27,17 +28,18 @@ public class User {
     @Column(name = "is_verified")
     private Boolean isVerified;
 
-    private String status="ACTIVE";
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private UserStatus status=UserStatus.ACTIVE;
 
     @Column(name = "created_at", updatable = false)
     private Instant createdAt=Instant.now();
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinTable(
-            name="user_roles",
-            joinColumns = @JoinColumn(name="user_id"),
-            inverseJoinColumns = @JoinColumn(name="role_id")
-    )
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(name = "user_roles",
+    joinColumns = @JoinColumn(name = "user_id"),
+    inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles;
+
 
 }
