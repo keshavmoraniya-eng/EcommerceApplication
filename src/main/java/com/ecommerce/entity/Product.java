@@ -48,6 +48,4 @@ public class Product {
     public void onUpdate(){
         this.updatedAt=Instant.now();
     }
-
-
 }
